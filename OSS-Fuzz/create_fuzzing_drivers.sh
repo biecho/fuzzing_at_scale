@@ -27,6 +27,7 @@ cp ./libAFL.a ${BOIAN_AFL}/afl_driver/libAFL.a
 # Driver for AFL++
 cd ${BOIAN_AFLPP}/utils/aflpp_driver
 make
+cp libAFLDriver.a ../../libAFLDriver.a
 
 
 # Driver for gcc
