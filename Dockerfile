@@ -14,6 +14,11 @@ RUN apt-get update && \
     ln -s /usr/bin/python3 /usr/bin/python && \
     rm -rf /var/lib/apt/lists/*
 
+# install legacy AFL (needs older LLVM, default from Ubuntu 20.04 is LLVM 10)
+RUN git clone https://github.com/google/AFL.git
+RUN pip install psutil
+RUN cd AFL && export AFL_NO_X86=1 && export LLVM_CONFIG=llvm-config && make && make -C llvm_mode
+
 # Install modern LLVM for AFL++ (AFL++ requires LLVM >= 13)
 RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
     echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-14 main" >> /etc/apt/sources.list && \
@@ -23,12 +28,10 @@ RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
     update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-14 100 && \
     update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-14 100
 
-# install AFL and AFL++
-RUN git clone https://github.com/google/AFL.git
+# install AFL++
 RUN git clone https://github.com/AFLplusplus/AFLplusplus 
-RUN pip install psutil
-RUN cd AFL && export AFL_NO_X86=1 && make && make -C llvm_mode
 RUN cd AFLplusplus && export LLVM_CONFIG=llvm-config-14 && make distrib && sudo make install
+
 
 COPY OSS-Fuzz ./OSS-Fuzz/
 COPY confirmed_bugs.txt ./
