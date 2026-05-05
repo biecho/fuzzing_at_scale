@@ -1,0 +1,8 @@
+Schedulers/obj/
+Schedulers/run/schedule
+Schedulers/run/l*.log
+Schedulers/run/triage_summary.log
+OSS-Fuzz/oss-fuzz/
+OSS-Fuzz/compiled/
+UbuntuBench/compiled/
+docker_build*.log
