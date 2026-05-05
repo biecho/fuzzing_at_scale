@@ -9,17 +9,26 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y git make sudo build-essential python3 python3-pip wget clang llvm \
     zip cmake autoconf automake curl strace ninja-build pkg-config \
-    libglib2.0-dev libprocps-dev libboost-all-dev libssl-dev  && \
+    libglib2.0-dev libprocps-dev libboost-all-dev libssl-dev gcc-plugin-dev  && \
     apt-get clean && \
     ln -s /usr/bin/python3 /usr/bin/python && \
     rm -rf /var/lib/apt/lists/*
+
+# Install modern LLVM for AFL++ (AFL++ requires LLVM >= 13)
+RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
+    echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal-14 main" >> /etc/apt/sources.list && \
+    apt-get update && \
+    apt-get install -y clang-14 llvm-14-dev llvm-14-tools lld-14 && \
+    update-alternatives --install /usr/bin/clang clang /usr/bin/clang-14 100 && \
+    update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-14 100 && \
+    update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-14 100
 
 # install AFL and AFL++
 RUN git clone https://github.com/google/AFL.git
 RUN git clone https://github.com/AFLplusplus/AFLplusplus 
 RUN pip install psutil
 RUN cd AFL && export AFL_NO_X86=1 && make && make -C llvm_mode
-RUN cd AFLplusplus && make distrib && sudo make install
+RUN cd AFLplusplus && export LLVM_CONFIG=llvm-config-14 && make distrib && sudo make install
 
 COPY OSS-Fuzz ./OSS-Fuzz/
 COPY confirmed_bugs.txt ./
