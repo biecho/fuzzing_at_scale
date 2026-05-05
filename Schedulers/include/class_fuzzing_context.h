@@ -162,8 +162,24 @@ public:
         return "some_unknown_binary";
     }
 
+    static std::string getBinaryPathFromFolder( std::string fold ) {
+        std::string filepath_fuzz_info {fold + "/fuzz_info.txt"} ;
+        if( folderFileExists(filepath_fuzz_info) ){
+            std::ifstream f(filepath_fuzz_info);
+            std::string file_binary_only;
+            getline(f,file_binary_only);
+            f.close();
+            return file_binary_only;
+        }  
+        return "";
+    }
+
     void serialize() ;
     void deserialize();
+
+    void writeReproductionScript();
+    void triageCrashes();
+    std::string getReproductionCommand(std::string input_path);
 
     void stopAFL(){
         killpg( getpgid(shm->afl_pid), SIGSTOP  ) ;        

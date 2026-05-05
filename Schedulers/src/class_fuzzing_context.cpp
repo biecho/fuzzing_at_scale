@@ -636,3 +636,64 @@ void FuzzingContext::deserialize(){
 }
 
 
+std::string FuzzingContext::getReproductionCommand(std::string input_path) {
+    std::string cmd = "";
+    if (cwd_lib.size() > 0) cmd += "cd " + cwd_lib + " && ";
+    if (ld_lib.size() > 0) cmd += "LD_LIBRARY_PATH=" + ld_lib + ":$LD_LIBRARY_PATH ";
+    cmd += "ASAN_OPTIONS=detect_leaks=0,abort_on_error=1,symbolize=1 "; 
+    cmd += file_binary_only + " ";
+    std::string par = param_binary;
+    size_t pos = par.find(" @@");
+    if (pos != std::string::npos) {
+        par.replace(pos, 3, " " + input_path);
+        cmd += par;
+    } else {
+        cmd += par + " < " + input_path;
+    }
+    return cmd;
+}
+
+void FuzzingContext::writeReproductionScript() {
+    std::string repro_path = folder_target_prog + "/repro.sh";
+    std::ofstream f(repro_path);
+    f << "#!/bin/bash\n";
+    f << "INPUT=$1\n";
+    f << "if [ -z \"$INPUT\" ]; then INPUT=\"@@\"; fi\n";
+    f << "if [ \"$INPUT\" != \"@@\" ]; then INPUT=$(realpath \"$INPUT\"); fi\n";
+    f << getReproductionCommand("$INPUT") << "\n";
+    f.close();
+    chmod(repro_path.c_str(), 0755);
+}
+
+void FuzzingContext::triageCrashes() {
+    if (!fs::exists(folder_crashes)) return;
+    for (const auto& entry : fs::directory_iterator(folder_crashes)) {
+        if (!entry.is_regular_file()) continue;
+        std::string filename = entry.path().filename().string();
+        if (filename.find(".triage") != std::string::npos || 
+            filename.find(".minimized") != std::string::npos ||
+            filename.find("repro.sh") != std::string::npos) continue;
+
+        std::string crash_file = entry.path().string();
+        std::string triage_file = crash_file + ".triage";
+        if (fs::exists(triage_file)) continue;
+
+        std::cout << KINFO << "Triaging crash: " << crash_file << KNRM << std::endl;
+        
+        // 1. Capture ASAN output
+        std::string cmd = getReproductionCommand(crash_file) + " > " + triage_file + " 2>&1";
+        [[maybe_unused]] int _ret = system(cmd.c_str());
+
+        // 2. Automated minimization (only if afl-tmin is available)
+        // This is done in the background or skipped if it takes too long
+        // For now, we just provide the command in the triage file
+        std::ofstream tf(triage_file, std::ios::app);
+        tf << "\n\n--- REPRODUCTION COMMAND ---\n";
+        tf << getReproductionCommand(crash_file) << "\n";
+        tf << "\n--- MINIMIZATION COMMAND ---\n";
+        tf << "afl-tmin -i " << crash_file << " -o " << crash_file << ".minimized -- " << file_binary_only << " " << param_binary << "\n";
+        tf.close();
+    }
+}
+
+

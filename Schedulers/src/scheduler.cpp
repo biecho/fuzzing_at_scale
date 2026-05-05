@@ -527,6 +527,7 @@ void createFuzzingContextes( const std::vector<std::string> &fuzz_candidates, st
             continue;
 
         fctx.push_back( ptr_ctx );
+        ptr_ctx->writeReproductionScript();
         if( ++tot_launched >= set.max_launched )
             break;
 
@@ -1434,6 +1435,13 @@ int main(int argc,  char **argv) {
             set.mode_ow_cont = 2;
             std::cout << KINFO "Continue run " << KNRM << "\n"; 
         }
+        if( strcmp( argv[i], "-confirmed" ) == 0 ){
+            filename_list_of_programs = "confirmed_bugs.txt";
+            if (!fs::exists(filename_list_of_programs)) filename_list_of_programs = "../confirmed_bugs.txt";
+            if (!fs::exists(filename_list_of_programs)) filename_list_of_programs = "../../confirmed_bugs.txt";
+            properAssert( fs::exists(filename_list_of_programs) , "Cannot find confirmed_bugs.txt" );
+            std::cout << KINFO "Fuzzing ONLY confirmed bugs from " << filename_list_of_programs << KNRM << "\n";
+        }
     }
 
     std::string prog_name;  
@@ -1452,14 +1460,35 @@ int main(int argc,  char **argv) {
     // leave only the required programs if file is provided
     if( filename_list_of_programs.size() > 0 ){
         std::ifstream mf( filename_list_of_programs );
-        std::string l;
-        std::set<std::string> s;
-        while( mf >> l )
-            s.insert( g_folder_fuzz_targets + "/" + l );
-        for( int i= fuzz_candidates.size()-1; i>=0; i--)
-            if( ! s.contains(fuzz_candidates[i]) )
-                fuzz_candidates.erase( fuzz_candidates.begin() + i ); 
-        mf.close();  
+        if (!mf.is_open()) {
+            // Try parent directory if not found (common if run from run/ directory)
+            mf.open("../" + filename_list_of_programs);
+        }
+        if (mf.is_open()) {
+            std::string l;
+            std::vector<std::string> targets;
+            while( mf >> l ) {
+                targets.push_back(l);
+            }
+            mf.close();
+
+            std::vector<std::string> filtered;
+            for( const auto& cand : fuzz_candidates ) {
+                std::string binary_path = FuzzingContext::getBinaryPathFromFolder(cand); 
+                bool found = false;
+                for( const auto& target : targets ) {
+                    if( binary_path.find(target) != std::string::npos ) {
+                        found = true;
+                        break;
+                    }
+                }
+                if( found ) filtered.push_back(cand);
+            }
+            fuzz_candidates = filtered;
+            std::cout << KINFO << "Filtered down to " << fuzz_candidates.size() << " programs matching the list." << KNRM << std::endl;
+        } else {
+            std::cout << KERR << "Could not open program list: " << filename_list_of_programs << KNRM << std::endl;
+        }
     }
 
     createFuzzingContextes( fuzz_candidates, fctx );
@@ -1779,9 +1808,12 @@ int main(int argc,  char **argv) {
         ){
             last_time_crash_report  = std::chrono::system_clock::now();
             std::vector< std::pair< uint, std::string> > crashes; 
-            for( auto t: fctx )
-                if( t->getNoCrashes() > 0 )
+            for( auto t: fctx ){
+                if( t->getNoCrashes() > 0 ){
                     crashes.push_back( {t->getNoCrashes()-1, t->getCrashFolder()});
+                    t->triageCrashes();
+                }
+            }
 
             try {
                 std::ofstream log_crashes("lcrashes.log", std::ios::trunc);
@@ -1793,6 +1825,31 @@ int main(int argc,  char **argv) {
                 }
                 else {
                     throw "File could not be opened.";
+                }
+
+                // Global Triage Summary
+                std::ofstream log_triage("triage_summary.log", std::ios::trunc);
+                if (log_triage.is_open()) {
+                    log_triage << "=== GLOBAL CRASH TRIAGE SUMMARY ===\n\n";
+                    for (auto t : fctx) {
+                        if (t->getNoCrashes() > 0) {
+                            log_triage << "Target: " << t->get_id() << " (" << t->getFolderRoot() << ")\n";
+                            log_triage << "Crashes: " << t->getNoCrashes() << "\n";
+                            log_triage << "Reproduction: " << t->getFolderRoot() << "/repro.sh\n";
+                            
+                            // Try to peek at the first triage report
+                            if (fs::exists(t->getCrashFolder())) {
+                                for (const auto& entry : fs::directory_iterator(t->getCrashFolder())) {
+                                    if (entry.path().extension() == ".triage") {
+                                        log_triage << "Example Triage: " << entry.path().filename().string() << "\n";
+                                        break; 
+                                    }
+                                }
+                            }
+                            log_triage << "-----------------------------------\n\n";
+                        }
+                    }
+                    log_triage.close();
                 }
             }
             catch (const char* error) {

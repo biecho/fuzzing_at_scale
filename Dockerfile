@@ -22,6 +22,7 @@ RUN cd AFL && export AFL_NO_X86=1 && make && make -C llvm_mode
 RUN cd AFLplusplus && make distrib && sudo make install
 
 COPY OSS-Fuzz ./OSS-Fuzz/
+COPY confirmed_bugs.txt ./
 
 # Copy the contents of OSS-Fuzz into the container
 COPY OSS-Fuzz ./OSS-Fuzz/
