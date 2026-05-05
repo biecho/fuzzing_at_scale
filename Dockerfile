@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y git make sudo build-essential python3 python3-pip wget clang llvm \
     zip cmake autoconf automake curl strace ninja-build pkg-config \
-    libglib2.0-dev libprocps-dev libboost-all-dev libssl-dev gcc-plugin-dev  && \
+    libglib2.0-dev libprocps-dev libboost-all-dev libssl-dev gcc-9-plugin-dev  && \
     apt-get clean && \
     ln -s /usr/bin/python3 /usr/bin/python && \
     rm -rf /var/lib/apt/lists/*
